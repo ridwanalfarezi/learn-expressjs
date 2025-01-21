@@ -1,0 +1,56 @@
+<% layout("layouts/app"); %>
+
+<h1 class="text-center">Register</h1>
+<div class="col-6 offset-3">
+  <form action="/register" method="POST" class="needs-validation" novalidate>
+    <div class="mb-3">
+      <label for="name" class="form-label">Name</label>
+      <input
+        class="form-control"
+        type="text"
+        name="name"
+        id="name"
+        required
+      />
+      <div class="valid-feedback">Looks good!</div>
+      <div class="invalid-feedback">Please enter your name.</div>
+    </div>
+    <div class="mb-3">
+      <label for="email" class="form-label">Email</label
+      ><input
+        class="form-control"
+        type="email"
+        name="email"
+        id="email"
+        required
+      />
+      <div class="valid-feedback">Looks good!</div>
+      <div class="invalid-feedback">Please enter a price.</div>
+    </div>
+    <div class="mb-3">
+      <label for="username" class="form-label">Username</label
+      ><input
+        class="form-control"
+        type="text"
+        name="username"
+        id="username"
+        required
+      />
+      <div class="valid-feedback">Looks good!</div>
+      <div class="invalid-feedback">Please enter your username.</div>
+    </div>
+    <div class="mb-3">
+      <label for="password" class="form-label">Password</label
+      ><input
+        class="form-control"
+        type="password"
+        name="password"
+        id="password"
+        required
+      />
+      <div class="valid-feedback">Looks good!</div>
+      <div class="invalid-feedback">Please enter your password.</div>
+    </div>
+    <button type="submit" class="btn btn-success">Register</button>
+  </form>
+</div>

@@ -1,0 +1,81 @@
+<% layout("layouts/app"); %>
+
+<h1 class="text-center">All Places</h1>
+<div id="mapContainer" style="width: 100%; height: 500px; margin-bottom: 5%"></div>
+<ul>
+  <% places.forEach((place) => { %>
+  <div class="card mb-3">
+    <div class="row">
+      <div class="col-md-4">
+        <% if(place.images.length > 0) {%>
+        <img
+          src="/images/<%= place.images[0].filename %>"
+          alt="<%= place.title %>"
+          class="img-fluid"
+        />
+        <% }else { %>
+        <img
+          src="https://placehold.co/1280x720"
+          alt="<%= place.title %>"
+          class="img-fluid"
+        />
+        <% } %>
+      </div>
+      <div class="col-md-8">
+        <div class="card-body">
+          <h5 class="card-title"><%= place.title %></h5>
+          <p class="card-text"><%= place.description %></p>
+          <p class="card-text">
+            <small class="text-secondary"><%= place.location %></small>
+          </p>
+          <a href="/places/<%= place.id %>" class="btn btn-primary">
+            View <%= place.title %></a
+          >
+        </div>
+      </div>
+    </div>
+  </div>
+  <% }); %>
+</ul>
+
+<script>
+  const clusteredPlace = <%- clusteredPlace %>;
+</script>
+<script>
+  function startClustering(map, data) {
+    const dataPoints = data.map(function (item) {
+      return new H.clustering.DataPoint(item.latitude, item.longitude);
+    });
+
+    const clusteredDataProvider = new H.clustering.Provider(dataPoints, {
+      clusteringOptions: {
+        eps: 32,
+        minWeight: 2,
+      },
+    });
+
+    const clusteringLayer = new H.map.layer.ObjectLayer(clusteredDataProvider);
+
+    map.addLayer(clusteringLayer);
+  }
+
+  const platform = new H.service.Platform({
+    apikey: "<%= process.env.HERE_MAPS_API_KEY %>",
+  });
+
+  const defaultLayers = platform.createDefaultLayers();
+
+  const map = new H.Map(
+    document.getElementById("mapContainer"),
+    defaultLayers.vector.normal.map,
+    {
+      zoom: 2,
+      center: { lat: -0.9730197, lng: 116.7034266 },
+    }
+  );
+
+  const ui = H.ui.UI.createDefault(map, defaultLayers, "en-US");
+  const behavior = new H.mapevents.Behavior(new H.mapevents.MapEvents(map));
+
+  startClustering(map, clusteredPlace);
+</script>

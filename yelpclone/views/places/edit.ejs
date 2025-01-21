@@ -1,0 +1,116 @@
+<% layout("layouts/app"); %>
+<h1 class="text-center">Update Place</h1>
+<div class="row mb-5">
+  <div class="col-6 <% !place.images.length > 0 ? 'offset-3' : '' %>">
+    <form
+      action="/places/<%= place.id %>?_method=PUT"
+      method="POST"
+      class="needs-validation"
+      novalidate
+      enctype="multipart/form-data"
+    >
+      <div class="mb-3">
+        <label for="title" class="form-label">Title</label>
+        <input
+          class="form-control"
+          type="text"
+          name="place[title]"
+          id="title"
+          value="<%= place.title %>"
+          required
+        />
+        <div class="valid-feedback">Looks good!</div>
+        <div class="invalid-feedback">Please enter a title.</div>
+      </div>
+      <div class="mb-3">
+        <label for="price" class="form-label">Price</label
+        ><input
+          class="form-control"
+          type="text"
+          inputmode="numeric"
+          name="place[price]"
+          id="price"
+          value="<%= place.price %>"
+          required
+        />
+        <div class="valid-feedback">Looks good!</div>
+        <div class="invalid-feedback">Please enter a price.</div>
+      </div>
+      <div class="mb-3">
+        <label for="description" class="form-label">Description</label
+        ><textarea
+          class="form-control"
+          name="place[description]"
+          id="description"
+          required
+        >
+  <%= place.description %></textarea
+        >
+        <div class="valid-feedback">Looks good!</div>
+        <div class="invalid-feedback">Please enter a description.</div>
+      </div>
+      <div class="mb-3">
+        <label for="location" class="form-label">Location</label
+        ><input
+          class="form-control"
+          type="text"
+          name="place[location]"
+          id="location"
+          value="<%= place.location %>"
+          required
+        />
+        <div class="valid-feedback">Looks good!</div>
+        <div class="invalid-feedback">Please enter a location.</div>
+      </div>
+      <div class="mb-3">
+        <label for="image" class="form-label">Image</label
+        ><input
+          class="form-control"
+          type="file"
+          name="image"
+          id="image"
+          accept="image/*"
+          multiple
+        />
+        <div class="valid-feedback">Looks good!</div>
+        <div class="invalid-feedback">Please enter an image URL.</div>
+      </div>
+      <button type="submit" class="btn btn-success">Submit</button>
+    </form>
+  </div>
+  <% if (place.images.length > 0) { %>
+  <div class="col-6">
+    <h5 class="text-center">Delete Images</h5>
+    <div class="form-group form-check">
+      <input type="checkbox" id="checkAll" class="form-check-input" />
+      <label for="checkAll" class="form-check-label">Pilih Semua</label>
+    </div>
+    <form action="/places/<%= place.id %>/images?_method=DELETE" method="POST" class="row">
+      <% place.images.forEach((image,index) => { %>
+      <div class="col-md-4">
+        <div class="card mb-3">
+          <img src="/images/<%= image.filename %>" class="card-img-top" />
+          <div class="card-body">
+            <div class="custom-checkbox">
+              <input type="checkbox" name="images[]" value="<%= image.url %>" />
+              <span class="custom-checkbox-label">Pilih</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <% }) %>
+      <br />
+      <button type="submit" class="btn btn-danger">Delete</button>
+    </form>
+  </div>
+  <% } %>
+</div>
+
+<script>
+  document.getElementById("checkAll").onclick = function () {
+    const checkboxes = document.getElementsByName("images[]");
+    for (const checkbox of checkboxes) {
+      checkbox.checked = this.checked;
+    }
+  }
+</script>
