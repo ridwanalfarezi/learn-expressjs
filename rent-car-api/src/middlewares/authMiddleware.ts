@@ -20,7 +20,6 @@ export const verifyUser = async (
     const decoded = jwt.verify(token, ACCESS_TOKEN_SECRET) as jwt.JwtPayload;
 
     if (decoded.role !== role) {
-      console.log("Invalid role");
       return res.status(403).json({ message: "Unauthorized" });
     }
 

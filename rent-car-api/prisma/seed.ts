@@ -105,7 +105,7 @@ const users: Omit<User, "id" | "token" | "createdAt" | "updatedAt">[] = [
   },
 ];
 
-const cars: Omit<Car, "id" | "createdAt" | "updatedAt">[] = [
+const cars: Omit<Car, "id" | "createdAt" | "updatedAt" | "image">[] = [
   {
     name: "Car 1",
     brand: "Toyota",

@@ -1,0 +1,42 @@
+services:
+  rent-car-api:
+    build: .
+    container_name: rent-car-api-dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=${DATABASE_URL}
+    depends_on:
+      - db
+    command: sh -c 'npx prisma migrate dev && npx prisma db seed && npm run dev'
+    develop:
+      watch:
+        - path: ./package.json
+          action: rebuild
+        - path: ./package-lock.json
+          action: rebuild
+        - path: ./tsconfig.json
+          action: rebuild
+        - path: ./nodemon.json
+          action: rebuild
+        - path: .
+          target: /app
+          action: sync
+  db:
+    image: postgres:14-alpine
+    restart: always
+    container_name: rent-car-db-dev
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
