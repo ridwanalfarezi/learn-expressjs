@@ -9,9 +9,11 @@ services:
     environment:
       - NODE_ENV=development
       - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
     depends_on:
       - db
-    command: sh -c 'npx prisma migrate dev && npx prisma db seed && npm run dev'
+      - redis
+    command: sh -c 'npx prisma migrate deploy && npx prisma generate && npm run dev'
     develop:
       watch:
         - path: ./package.json
@@ -25,6 +27,8 @@ services:
         - path: .
           target: /app
           action: sync
+    networks:
+      - rent-car-network
   db:
     image: postgres:14-alpine
     restart: always
@@ -37,6 +41,20 @@ services:
       - POSTGRES_DB=${POSTGRES_DB}
     volumes:
       - pgdata:/var/lib/postgresql/data
+    networks:
+      - rent-car-network
+  redis:
+    image: redis:alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    networks:
+      - rent-car-network
+
+networks:
+  rent-car-network:
+    driver: bridge
 
 volumes:
   pgdata:
+    driver: local

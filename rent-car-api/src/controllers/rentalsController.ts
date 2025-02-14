@@ -1,5 +1,6 @@
 import { PrismaClient, Rental } from "@prisma/client";
 import { Request, Response } from "express";
+import redisClient from "../config/redis";
 
 const prisma = new PrismaClient();
 class RentalsController {
@@ -15,6 +16,13 @@ class RentalsController {
       startedDate: Date;
       endDate: Date;
     };
+
+    const cacheKey = `rentals:${query}:${page}:${startedDate}:${endDate}`;
+    const cachedRents = await redisClient.get(cacheKey);
+
+    if (cachedRents) {
+      return res.json({ data: JSON.parse(cachedRents) });
+    }
 
     let rents;
 
@@ -44,29 +52,9 @@ class RentalsController {
         });
       }
 
-      await Promise.all(
-        rents.map(async (rent) => {
-          if (rent.startDate && rent.endDate) {
-            if (rent.startDate <= new Date() && rent.endDate >= new Date()) {
-              rent.status = "active";
-            }
-
-            if (rent.startDate < new Date() && rent.endDate < new Date()) {
-              rent.status = "finished";
-
-              await prisma.car.update({
-                where: { id: rent.carId },
-                data: { quantity: { increment: rent.quantity } },
-              });
-            }
-
-            await prisma.rental.update({
-              where: { id: rent.id },
-              data: { status: rent.status },
-            });
-          }
-        })
-      );
+      await redisClient.set(cacheKey, JSON.stringify(rents), {
+        EX: 3600,
+      });
 
       res.json({ data: rents });
     } catch (error) {
@@ -78,6 +66,13 @@ class RentalsController {
   async show(req: Request, res: Response) {
     try {
       const { rentalId } = req.params;
+      const cacheKey = `rental:${rentalId}`;
+      const cachedRent = await redisClient.get(cacheKey);
+
+      if (cachedRent) {
+        return res.json({ data: JSON.parse(cachedRent) });
+      }
+
       const rent = await prisma.rental.findUnique({
         where: { id: rentalId },
         include: { car: true, user: true },
@@ -87,19 +82,8 @@ class RentalsController {
         return res.status(404).json({ message: "Rental not found" });
       }
 
-      if (rent.startDate && rent.endDate) {
-        if (rent.startDate >= new Date() && rent.endDate >= new Date()) {
-          rent.status = "active";
-        }
-
-        if (rent.startDate < new Date() && rent.endDate < new Date()) {
-          rent.status = "finished";
-        }
-      }
-
-      await prisma.rental.update({
-        where: { id: rent.id },
-        data: { status: rent.status },
+      await redisClient.set(cacheKey, JSON.stringify(rent), {
+        EX: 3600,
       });
 
       res.json({ data: rent });
@@ -138,7 +122,7 @@ class RentalsController {
         (new Date(endDate).getTime() - new Date(startDate).getTime())) /
       86400000;
 
-    await prisma.rental.create({
+    const rental = await prisma.rental.create({
       data: {
         carId,
         userId: currentUser.id,
@@ -154,7 +138,11 @@ class RentalsController {
       data: { quantity: car.quantity - quantity },
     });
 
-    res.status(201).json({ message: "Rental created successfully" });
+    await redisClient.del(`rentals:*`);
+
+    res
+      .status(201)
+      .json({ message: "Rental created successfully", data: rental });
   }
 
   async update(req: Request, res: Response) {
@@ -207,7 +195,7 @@ class RentalsController {
       }
     }
 
-    await prisma.rental.update({
+    const updatedRental = await prisma.rental.update({
       where: { id: rentalId },
       data: {
         startDate,
@@ -215,7 +203,10 @@ class RentalsController {
       },
     });
 
-    res.json({ message: "Rental updated successfully" });
+    await redisClient.del(`rental:${rentalId}`);
+    await redisClient.del(`rentals:*`);
+
+    res.json({ message: "Rental updated successfully", data: updatedRental });
   }
 
   async destroy(req: Request, res: Response) {
@@ -248,12 +239,22 @@ class RentalsController {
       data: { quantity: { increment: rent.quantity } },
     });
 
+    await redisClient.del(`rental:${rentalId}`);
+    await redisClient.del(`rentals:*`);
+
     res.json({ message: "Rental deleted successfully" });
   }
 
   async showByUser(req: Request, res: Response) {
     const { userId } = req.params;
     const currentUser = req.user as { id: string };
+
+    const cacheKey = `rentals:user:${userId}`;
+    const cachedRents = await redisClient.get(cacheKey);
+
+    if (cachedRents) {
+      return res.json({ data: JSON.parse(cachedRents) });
+    }
 
     const rents = await prisma.rental.findMany({
       where: { userId },
@@ -264,19 +265,8 @@ class RentalsController {
       return res.status(403).json({ message: "Unauthorized" });
     }
 
-    rents.forEach(async (rent) => {
-      if (rent.startDate >= new Date() && rent.endDate >= new Date()) {
-        rent.status = "active";
-      }
-
-      if (rent.startDate < new Date() && rent.endDate <= new Date()) {
-        rent.status = "finished";
-      }
-
-      await prisma.rental.update({
-        where: { id: rent.id },
-        data: { status: rent.status },
-      });
+    await redisClient.set(cacheKey, JSON.stringify(rents), {
+      EX: 3600,
     });
 
     res.json({ data: rents });

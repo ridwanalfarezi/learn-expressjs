@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { Request, Response } from "express";
+import redisClient from "../config/redis";
 
 const prisma = new PrismaClient();
 
@@ -9,8 +10,15 @@ class UsersController {
       query: string;
       page: number;
     };
-    let users;
 
+    const cacheKey = `users:${query}:${page}`;
+    const cachedUsers = await redisClient.get(cacheKey);
+
+    if (cachedUsers) {
+      return res.json({ data: JSON.parse(cachedUsers) });
+    }
+
+    let users;
     if (query) {
       users = await prisma.user.findMany({
         where: {
@@ -43,11 +51,21 @@ class UsersController {
       });
     }
 
+    await redisClient.set(cacheKey, JSON.stringify(users), {
+      EX: 3600, // Expire in 1 hour
+    });
+
     res.json({ data: users });
   }
 
   async show(req: Request, res: Response) {
     const { id } = req.params;
+    const cacheKey = `user:${id}`;
+    const cachedUser = await redisClient.get(cacheKey);
+
+    if (cachedUser) {
+      return res.json({ data: JSON.parse(cachedUser) });
+    }
 
     const user = await prisma.user.findUnique({
       where: { id },
@@ -62,6 +80,10 @@ class UsersController {
       return res.status(404).json({ message: "User not found" });
     }
 
+    await redisClient.set(cacheKey, JSON.stringify(user), {
+      EX: 3600, // Expire in 1 hour
+    });
+
     res.json({ data: user });
   }
 
@@ -72,6 +94,9 @@ class UsersController {
       data: { name, email, role: "customer" },
     });
 
+    // Clear cache for users list
+    await redisClient.del(`users:*`);
+
     res.json({ message: "User created successfully", data: user });
   }
 
@@ -79,7 +104,7 @@ class UsersController {
     const { id } = req.params;
     const { name, email } = req.body as { name: string; email: string };
 
-    const user = prisma.user.findUnique({ where: { id } });
+    const user = await prisma.user.findUnique({ where: { id } });
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });
@@ -90,19 +115,27 @@ class UsersController {
       data: { name, email },
     });
 
+    // Clear cache for this user and users list
+    await redisClient.del(`user:${id}`);
+    await redisClient.del(`users:*`);
+
     res.json({ message: "User updated successfully", data: updatedUser });
   }
 
   async destroy(req: Request, res: Response) {
     const { id } = req.params;
 
-    const user = prisma.user.findUnique({ where: { id } });
+    const user = await prisma.user.findUnique({ where: { id } });
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
 
     await prisma.user.delete({ where: { id } });
+
+    // Clear cache for this user and users list
+    await redisClient.del(`user:${id}`);
+    await redisClient.del(`users:*`);
 
     res.json({ message: "User deleted successfully" });
   }

@@ -8,6 +8,7 @@ import usersRouter from "./routes/admin/users";
 import authRouter from "./routes/auth";
 import rentalsRouter from "./routes/rentals";
 import ErrorHandler from "./utils/ErrorHandler";
+import "./utils/cronJobs";
 
 const app = express();
 
