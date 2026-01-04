@@ -13,7 +13,7 @@ import authRouter from "./routes/auth";
 import rentalsRouter from "./routes/rentals";
 import "./utils/cronJobs";
 import ErrorHandler from "./utils/ErrorHandler";
-import { logError } from "./utils/logger";
+import { globalErrorHandler } from "./utils/errors/errorHandler";
 
 const app = express();
 
@@ -110,29 +110,8 @@ app.all("*", (req: Request, res: Response, next: NextFunction) => {
   next(new ErrorHandler("Route not found", 404));
 });
 
-app.use((err: any, req: Request, res: Response, next: NextFunction) => {
-  // Log error untuk monitoring
-  logError(err, {
-    method: req.method,
-    path: req.path,
-    ip: req.ip,
-    userAgent: req.get("user-agent"),
-    statusCode: err.statusCode,
-  });
-
-  // Return safe error message
-  const statusCode = err.statusCode || 500;
-  const message =
-    process.env.NODE_ENV === "production" && statusCode === 500
-      ? "Internal server error"
-      : err.message;
-
-  res.status(statusCode).json({
-    error: true,
-    message,
-    ...(process.env.NODE_ENV !== "production" && { stack: err.stack }),
-  });
-});
+// Global error handler - must be registered last
+app.use(globalErrorHandler);
 
 app.listen(PORT, () => {
   console.log(`✅ Server running on ${SERVER_URL}`);

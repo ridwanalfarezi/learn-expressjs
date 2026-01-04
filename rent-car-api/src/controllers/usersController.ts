@@ -1,157 +1,67 @@
-import { PrismaClient } from "@prisma/client";
 import { Request, Response } from "express";
-import { safeRedisDel, safeRedisGet, safeRedisSet } from "../config/redis";
+import { userService } from "../services";
+import { asyncHandler } from "../utils/errors";
 
-const prisma = new PrismaClient();
-
+/**
+ * Users Controller - Thin controller focused only on HTTP concerns
+ * All business logic delegated to UserService
+ */
 class UsersController {
-  async index(req: Request, res: Response) {
-    let { query, page = 1 } = req.query as unknown as {
-      query: string;
-      page: number;
-    };
+  /**
+   * GET /admin/users
+   * Get list of users with optional filtering and pagination
+   */
+  index = asyncHandler(async (req: Request, res: Response) => {
+    const { query, page } = req.query;
 
-    // Validate and sanitize inputs
-    const sanitizedQuery = query?.trim().substring(0, 100) || "";
-    const validatedPage = Math.max(
-      1,
-      Math.min(parseInt(page as any) || 1, 1000)
-    );
-
-    if (sanitizedQuery && sanitizedQuery.length < 2) {
-      return res
-        .status(400)
-        .json({ message: "Query must be at least 2 characters" });
-    }
-
-    const cacheKey = `users:${sanitizedQuery}:${validatedPage}`;
-    const cachedUsers = await safeRedisGet(cacheKey);
-
-    if (cachedUsers) {
-      return res.json({ data: JSON.parse(cachedUsers) });
-    }
-
-    let users;
-    if (sanitizedQuery) {
-      users = await prisma.user.findMany({
-        where: {
-          role: "customer",
-          OR: [
-            { name: { contains: sanitizedQuery, mode: "insensitive" } },
-            { email: { contains: sanitizedQuery, mode: "insensitive" } },
-          ],
-        },
-        take: 10,
-        skip: (validatedPage - 1) * 10,
-        select: {
-          id: true,
-          name: true,
-          email: true,
-        },
-      });
-    } else {
-      users = await prisma.user.findMany({
-        where: {
-          role: "customer",
-        },
-        take: 10,
-        skip: (validatedPage - 1) * 10,
-        select: {
-          id: true,
-          name: true,
-          email: true,
-        },
-      });
-    }
-
-    await safeRedisSet(cacheKey, JSON.stringify(users), {
-      EX: 3600, // Expire in 1 hour
+    const users = await userService.getAllUsers({
+      query: (query as string) || "",
+      page: Math.max(1, Math.min(parseInt(page as string) || 1, 1000)),
     });
 
     res.json({ data: users });
-  }
+  });
 
-  async show(req: Request, res: Response) {
+  /**
+   * GET /admin/users/:id
+   * Get a single user by ID
+   */
+  show = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
-    const cacheKey = `user:${id}`;
-    const cachedUser = await safeRedisGet(cacheKey);
-
-    if (cachedUser) {
-      return res.json({ data: JSON.parse(cachedUser) });
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-      },
-    });
-
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    await safeRedisSet(cacheKey, JSON.stringify(user), {
-      EX: 3600, // Expire in 1 hour
-    });
-
+    const user = await userService.getUserById(id);
     res.json({ data: user });
-  }
+  });
 
-  async store(req: Request, res: Response) {
-    const { name, email } = req.body as { name: string; email: string };
+  /**
+   * POST /admin/users
+   * Create a new user
+   */
+  store = asyncHandler(async (req: Request, res: Response) => {
+    const { name, email } = req.body;
+    const user = await userService.createUser({ name, email });
+    res.status(201).json({ message: "User created successfully", data: user });
+  });
 
-    const user = await prisma.user.create({
-      data: { name, email, role: "customer" },
-    });
-
-    // Clear cache for users list
-    await safeRedisDel(`users:*`);
-
-    res.json({ message: "User created successfully", data: user });
-  }
-
-  async update(req: Request, res: Response) {
+  /**
+   * PUT /admin/users/:id
+   * Update a user
+   */
+  update = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name, email } = req.body as { name: string; email: string };
+    const { name, email } = req.body;
+    const user = await userService.updateUser(id, { name, email });
+    res.json({ message: "User updated successfully", data: user });
+  });
 
-    const user = await prisma.user.findUnique({ where: { id } });
-
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    const updatedUser = await prisma.user.update({
-      where: { id },
-      data: { name, email },
-    });
-
-    // Clear cache for this user and users list
-    await safeRedisDel(`user:${id}`);
-    await safeRedisDel(`users:*`);
-
-    res.json({ message: "User updated successfully", data: updatedUser });
-  }
-
-  async destroy(req: Request, res: Response) {
+  /**
+   * DELETE /admin/users/:id
+   * Delete a user
+   */
+  destroy = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
-
-    const user = await prisma.user.findUnique({ where: { id } });
-
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    await prisma.user.delete({ where: { id } });
-
-    // Clear cache for this user and users list
-    await safeRedisDel(`user:${id}`);
-    await safeRedisDel(`users:*`);
-
+    await userService.deleteUser(id);
     res.json({ message: "User deleted successfully" });
-  }
+  });
 }
 
 export default new UsersController();

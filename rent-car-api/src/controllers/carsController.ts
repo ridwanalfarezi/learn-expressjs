@@ -1,117 +1,83 @@
-import { PrismaClient } from "@prisma/client";
 import { Request, Response } from "express";
-import { safeRedisDel, safeRedisGet, safeRedisSet } from "../config/redis";
+import { carService } from "../services";
+import { asyncHandler } from "../utils/errors";
 
-const prisma = new PrismaClient();
+/**
+ * Cars Controller - Thin controller focused only on HTTP concerns
+ * All business logic delegated to CarService
+ */
 class CarsController {
-  async index(req: Request, res: Response) {
-    const { query, page = 1 } = req.query as unknown as {
-      query: string;
-      page: number;
-    };
+  /**
+   * GET /admin/cars
+   * Get list of cars with optional filtering and pagination
+   */
+  index = asyncHandler(async (req: Request, res: Response) => {
+    const { query, page } = req.query;
 
-    const cacheKey = `cars:${query}:${page}`;
-    const cachedCars = await safeRedisGet(cacheKey);
-
-    if (cachedCars) {
-      return res.json({ data: JSON.parse(cachedCars) });
-    }
-
-    let cars;
-
-    if (query) {
-      cars = await prisma.car.findMany({
-        where: {
-          name: { contains: query },
-        },
-        take: 10,
-        skip: (page - 1) * 10,
-      });
-    } else {
-      cars = await prisma.car.findMany({
-        take: 10,
-        skip: (page - 1) * 10,
-      });
-    }
-
-    await safeRedisSet(cacheKey, JSON.stringify(cars), {
-      EX: 3600,
+    const cars = await carService.getAllCars({
+      query: (query as string) || "",
+      page: Math.max(1, Math.min(parseInt(page as string) || 1, 1000)),
     });
 
     res.json({ data: cars });
-  }
+  });
 
-  async show(req: Request, res: Response) {
+  /**
+   * GET /admin/cars/:id
+   * Get a single car by ID
+   */
+  show = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
-    const cacheKey = `car:${id}`;
-    const cachedCar = await safeRedisGet(cacheKey);
-
-    if (cachedCar) {
-      return res.json({ data: JSON.parse(cachedCar) });
-    }
-
-    const car = await prisma.car.findUnique({ where: { id } });
-    if (!car) {
-      return res.status(404).json({ message: "Car not found" });
-    }
-
-    await safeRedisSet(cacheKey, JSON.stringify(car), {
-      EX: 3600,
-    });
-
+    const car = await carService.getCarById(id);
     res.json({ data: car });
-  }
+  });
 
-  async store(req: Request, res: Response) {
-    const car = await prisma.car.create({
-      data: {
-        ...req.body,
-        image: req.file ? req.file.path : null,
-        price: Number(req.body.price),
-        quantity: Number(req.body.quantity),
-      },
+  /**
+   * POST /admin/cars
+   * Create a new car
+   */
+  store = asyncHandler(async (req: Request, res: Response) => {
+    const { name, brand, price, quantity } = req.body;
+
+    const car = await carService.createCar({
+      name,
+      brand,
+      price: Number(price),
+      quantity: Number(quantity),
+      image: req.file ? req.file.path : undefined,
     });
 
-    await safeRedisDel(`cars:*`);
+    res.status(201).json({ message: "Car created successfully", data: car });
+  });
 
-    res.json({ message: "Car created successfully", data: car });
-  }
-
-  async update(req: Request, res: Response) {
+  /**
+   * PUT /admin/cars/:id
+   * Update a car
+   */
+  update = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
-    const car = await prisma.car.findUnique({ where: { id } });
-    if (!car) {
-      return res.status(404).json({ message: "Car not found" });
-    }
-    const updatedCar = await prisma.car.update({
-      where: { id },
-      data: {
-        ...req.body,
-        image: req.file ? req.file.path : car.image,
-        price: Number(req.body.price),
-        quantity: Number(req.body.quantity),
-      },
+    const { name, brand, price, quantity } = req.body;
+
+    const car = await carService.updateCar(id, {
+      name,
+      brand,
+      price: price ? Number(price) : undefined,
+      quantity: quantity ? Number(quantity) : undefined,
+      image: req.file ? req.file.path : undefined,
     });
 
-    await safeRedisDel(`car:${id}`);
-    await safeRedisDel(`cars:*`);
+    res.json({ message: "Car updated successfully", data: car });
+  });
 
-    res.json({ message: "Car updated successfully", data: updatedCar });
-  }
-
-  async destroy(req: Request, res: Response) {
+  /**
+   * DELETE /admin/cars/:id
+   * Delete a car
+   */
+  destroy = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
-    const car = await prisma.car.findUnique({ where: { id } });
-    if (!car) {
-      return res.status(404).json({ message: "Car not found" });
-    }
-    await prisma.car.delete({ where: { id } });
-
-    await safeRedisDel(`car:${id}`);
-    await safeRedisDel(`cars:*`);
-
+    await carService.deleteCar(id);
     res.json({ message: "Car deleted successfully" });
-  }
+  });
 }
 
 export default new CarsController();
