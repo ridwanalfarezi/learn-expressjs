@@ -2,7 +2,25 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-const PORT = process.env.PORT || 3000;
+// Validate required environment variables
+const requiredEnvVars = [
+  "GOOGLE_CLIENT_ID",
+  "GOOGLE_CLIENT_SECRET",
+  "JWT_ACCESS_TOKEN_SECRET",
+  "JWT_REFRESH_TOKEN_SECRET",
+  "DATABASE_URL",
+];
+
+const missingVars = requiredEnvVars.filter((varName) => !process.env[varName]);
+
+if (missingVars.length > 0) {
+  console.error("❌ Missing required environment variables:");
+  missingVars.forEach((varName) => console.error(`  - ${varName}`));
+  process.exit(1);
+}
+
+// Export dengan validation
+const PORT = parseInt(process.env.PORT || "3000", 10);
 const SERVER_URL = process.env.SERVER_URL || `http://localhost:${PORT}`;
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID!;

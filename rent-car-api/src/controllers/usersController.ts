@@ -1,35 +1,48 @@
 import { PrismaClient } from "@prisma/client";
 import { Request, Response } from "express";
-import redisClient from "../config/redis";
+import { safeRedisDel, safeRedisGet, safeRedisSet } from "../config/redis";
 
 const prisma = new PrismaClient();
 
 class UsersController {
   async index(req: Request, res: Response) {
-    const { query, page = 1 } = req.query as unknown as {
+    let { query, page = 1 } = req.query as unknown as {
       query: string;
       page: number;
     };
 
-    const cacheKey = `users:${query}:${page}`;
-    const cachedUsers = await redisClient.get(cacheKey);
+    // Validate and sanitize inputs
+    const sanitizedQuery = query?.trim().substring(0, 100) || "";
+    const validatedPage = Math.max(
+      1,
+      Math.min(parseInt(page as any) || 1, 1000)
+    );
+
+    if (sanitizedQuery && sanitizedQuery.length < 2) {
+      return res
+        .status(400)
+        .json({ message: "Query must be at least 2 characters" });
+    }
+
+    const cacheKey = `users:${sanitizedQuery}:${validatedPage}`;
+    const cachedUsers = await safeRedisGet(cacheKey);
 
     if (cachedUsers) {
       return res.json({ data: JSON.parse(cachedUsers) });
     }
 
     let users;
-    if (query) {
+    if (sanitizedQuery) {
       users = await prisma.user.findMany({
         where: {
           role: "customer",
           OR: [
-            { name: { contains: query, mode: "insensitive" } },
-            { email: { contains: query, mode: "insensitive" } },
+            { name: { contains: sanitizedQuery, mode: "insensitive" } },
+            { email: { contains: sanitizedQuery, mode: "insensitive" } },
           ],
         },
         take: 10,
-        skip: (page - 1) * 10,
+        skip: (validatedPage - 1) * 10,
         select: {
           id: true,
           name: true,
@@ -42,7 +55,7 @@ class UsersController {
           role: "customer",
         },
         take: 10,
-        skip: (page - 1) * 10,
+        skip: (validatedPage - 1) * 10,
         select: {
           id: true,
           name: true,
@@ -51,7 +64,7 @@ class UsersController {
       });
     }
 
-    await redisClient.set(cacheKey, JSON.stringify(users), {
+    await safeRedisSet(cacheKey, JSON.stringify(users), {
       EX: 3600, // Expire in 1 hour
     });
 
@@ -61,7 +74,7 @@ class UsersController {
   async show(req: Request, res: Response) {
     const { id } = req.params;
     const cacheKey = `user:${id}`;
-    const cachedUser = await redisClient.get(cacheKey);
+    const cachedUser = await safeRedisGet(cacheKey);
 
     if (cachedUser) {
       return res.json({ data: JSON.parse(cachedUser) });
@@ -80,7 +93,7 @@ class UsersController {
       return res.status(404).json({ message: "User not found" });
     }
 
-    await redisClient.set(cacheKey, JSON.stringify(user), {
+    await safeRedisSet(cacheKey, JSON.stringify(user), {
       EX: 3600, // Expire in 1 hour
     });
 
@@ -95,7 +108,7 @@ class UsersController {
     });
 
     // Clear cache for users list
-    await redisClient.del(`users:*`);
+    await safeRedisDel(`users:*`);
 
     res.json({ message: "User created successfully", data: user });
   }
@@ -116,8 +129,8 @@ class UsersController {
     });
 
     // Clear cache for this user and users list
-    await redisClient.del(`user:${id}`);
-    await redisClient.del(`users:*`);
+    await safeRedisDel(`user:${id}`);
+    await safeRedisDel(`users:*`);
 
     res.json({ message: "User updated successfully", data: updatedUser });
   }
@@ -134,8 +147,8 @@ class UsersController {
     await prisma.user.delete({ where: { id } });
 
     // Clear cache for this user and users list
-    await redisClient.del(`user:${id}`);
-    await redisClient.del(`users:*`);
+    await safeRedisDel(`user:${id}`);
+    await safeRedisDel(`users:*`);
 
     res.json({ message: "User deleted successfully" });
   }

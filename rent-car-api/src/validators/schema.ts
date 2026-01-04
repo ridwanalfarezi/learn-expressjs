@@ -14,8 +14,7 @@ export const carSchema = Joi.object({
 
 export const rentalSchema = Joi.object({
   carId: Joi.string().required(),
-  quantity: Joi.number().min(1).required(),
-  price: Joi.number().required(),
+  quantity: Joi.number().min(1).max(100).required(),
   startDate: Joi.date().min("now").required(),
   endDate: Joi.date()
     .min(Joi.ref("startDate"))

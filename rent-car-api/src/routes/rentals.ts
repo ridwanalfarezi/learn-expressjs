@@ -16,10 +16,14 @@ router
 
 router
   .route("/:rentalId")
-  .get(wrapAsync(rentalsController.show))
+  .get(isCustomer, wrapAsync(rentalsController.show))
   .put(isCustomer, validateRentalUpdate, wrapAsync(rentalsController.update))
   .delete(isCustomer, wrapAsync(rentalsController.destroy));
 
-router.get("/user/:userId", isCustomer, wrapAsync(rentalsController.showByUser));
+router.get(
+  "/user/:userId",
+  isCustomer,
+  wrapAsync(rentalsController.showByUser)
+);
 
 export default router;

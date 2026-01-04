@@ -1,20 +1,87 @@
+import cookieParser from "cookie-parser";
+import cors from "cors";
 import express, { NextFunction, Request, Response } from "express";
+import rateLimit from "express-rate-limit";
+import helmet from "helmet";
 import passport from "passport";
 import path from "path";
 import { initializePassport } from "./config/passport";
-import { SERVER_URL } from "./env";
+import { PORT, SERVER_URL } from "./env";
 import carsRouter from "./routes/admin/cars";
 import usersRouter from "./routes/admin/users";
 import authRouter from "./routes/auth";
 import rentalsRouter from "./routes/rentals";
-import ErrorHandler from "./utils/ErrorHandler";
 import "./utils/cronJobs";
+import ErrorHandler from "./utils/ErrorHandler";
+import { logError } from "./utils/logger";
 
 const app = express();
 
+// Security Middleware - Helmet untuk mengamankan HTTP Headers
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "https:"],
+        scriptSrc: ["'self'"],
+      },
+    },
+    hsts: {
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: true,
+    },
+    noSniff: true,
+    referrerPolicy: { policy: "same-origin" },
+  })
+);
+
+// CORS Configuration
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",") || [
+  "http://localhost:3000",
+];
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, Postman, etc.)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true, // Allow cookies
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    maxAge: 86400, // Cache preflight for 24 hours
+  })
+);
+
+// Rate Limiting
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 menit
+  max: 100, // 100 requests per window
+  message: "Too many requests from this IP, please try again later",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5, // Hanya 5 attempts per 15 menit
+  message: "Too many authentication attempts, please try again later",
+  skipSuccessfulRequests: true, // Hanya count failed attempts
+});
+
 // Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "10kb" })); // Limit JSON payload
+app.use(express.urlencoded({ extended: true, limit: "10kb" })); // Limit URL-encoded
+app.use(cookieParser()); // Untuk membaca cookies
 app.use(
   "/public/images",
   express.static(path.join(__dirname, "../public/images"))
@@ -24,12 +91,12 @@ app.use(
 initializePassport(passport);
 app.use(passport.initialize());
 
-app.use("/auth", authRouter);
-app.use("/rentals", rentalsRouter);
+app.use("/auth", authLimiter, authRouter);
+app.use("/rentals", apiLimiter, rentalsRouter);
 
 // Admin routes
-app.use("/admin/users", usersRouter);
-app.use("/admin/cars", carsRouter);
+app.use("/admin/users", apiLimiter, usersRouter);
+app.use("/admin/cars", apiLimiter, carsRouter);
 
 app.get("/", (req: Request, res: Response) => {
   res.json({ message: "Welcome to Car Rental API, API Docs: /docs" });
@@ -44,9 +111,30 @@ app.all("*", (req: Request, res: Response, next: NextFunction) => {
 });
 
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
-  res.status(err.statusCode || 500).json({ message: err.message });
+  // Log error untuk monitoring
+  logError(err, {
+    method: req.method,
+    path: req.path,
+    ip: req.ip,
+    userAgent: req.get("user-agent"),
+    statusCode: err.statusCode,
+  });
+
+  // Return safe error message
+  const statusCode = err.statusCode || 500;
+  const message =
+    process.env.NODE_ENV === "production" && statusCode === 500
+      ? "Internal server error"
+      : err.message;
+
+  res.status(statusCode).json({
+    error: true,
+    message,
+    ...(process.env.NODE_ENV !== "production" && { stack: err.stack }),
+  });
 });
 
-app.listen(3000, () => {
-  console.log(`Server running on ${SERVER_URL}`);
+app.listen(PORT, () => {
+  console.log(`✅ Server running on ${SERVER_URL}`);
+  console.log(`✅ Environment: ${process.env.NODE_ENV || "development"}`);
 });

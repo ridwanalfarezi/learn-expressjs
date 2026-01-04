@@ -1,6 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { Request, Response } from "express";
-import redisClient from "../config/redis";
+import { safeRedisDel, safeRedisGet, safeRedisSet } from "../config/redis";
 
 const prisma = new PrismaClient();
 class CarsController {
@@ -11,7 +11,7 @@ class CarsController {
     };
 
     const cacheKey = `cars:${query}:${page}`;
-    const cachedCars = await redisClient.get(cacheKey);
+    const cachedCars = await safeRedisGet(cacheKey);
 
     if (cachedCars) {
       return res.json({ data: JSON.parse(cachedCars) });
@@ -34,7 +34,7 @@ class CarsController {
       });
     }
 
-    await redisClient.set(cacheKey, JSON.stringify(cars), {
+    await safeRedisSet(cacheKey, JSON.stringify(cars), {
       EX: 3600,
     });
 
@@ -44,7 +44,7 @@ class CarsController {
   async show(req: Request, res: Response) {
     const { id } = req.params;
     const cacheKey = `car:${id}`;
-    const cachedCar = await redisClient.get(cacheKey);
+    const cachedCar = await safeRedisGet(cacheKey);
 
     if (cachedCar) {
       return res.json({ data: JSON.parse(cachedCar) });
@@ -55,7 +55,7 @@ class CarsController {
       return res.status(404).json({ message: "Car not found" });
     }
 
-    await redisClient.set(cacheKey, JSON.stringify(car), {
+    await safeRedisSet(cacheKey, JSON.stringify(car), {
       EX: 3600,
     });
 
@@ -72,7 +72,7 @@ class CarsController {
       },
     });
 
-    await redisClient.del(`cars:*`);
+    await safeRedisDel(`cars:*`);
 
     res.json({ message: "Car created successfully", data: car });
   }
@@ -93,8 +93,8 @@ class CarsController {
       },
     });
 
-    await redisClient.del(`car:${id}`);
-    await redisClient.del(`cars:*`);
+    await safeRedisDel(`car:${id}`);
+    await safeRedisDel(`cars:*`);
 
     res.json({ message: "Car updated successfully", data: updatedCar });
   }
@@ -107,8 +107,8 @@ class CarsController {
     }
     await prisma.car.delete({ where: { id } });
 
-    await redisClient.del(`car:${id}`);
-    await redisClient.del(`cars:*`);
+    await safeRedisDel(`car:${id}`);
+    await safeRedisDel(`cars:*`);
 
     res.json({ message: "Car deleted successfully" });
   }

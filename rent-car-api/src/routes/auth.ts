@@ -25,6 +25,14 @@ router.get(
       tokens: { accessToken: string; refreshToken: string };
     };
 
+    // Set HttpOnly Cookie untuk refresh token (Anti-XSS)
+    res.cookie("refreshToken", tokens.refreshToken, {
+      httpOnly: true, // JS tidak bisa akses
+      secure: process.env.NODE_ENV === "production", // Wajib HTTPS di production
+      sameSite: "strict", // Anti-CSRF
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 Hari
+    });
+
     res.json({
       message: "Login successful",
       user: {
@@ -35,14 +43,15 @@ router.get(
       token: {
         type: "Bearer",
         accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
+        // refreshToken tidak lagi dikirim di body untuk keamanan
       },
     });
   }
 );
 
 router.post("/refresh", async (req: Request, res: Response): Promise<any> => {
-  const { refreshToken } = req.body as { refreshToken: string };
+  // Baca refresh token dari HttpOnly Cookie (Security Enhancement)
+  const refreshToken = req.cookies?.refreshToken;
 
   if (!refreshToken) {
     return res.status(400).json({ message: "Refresh token is required" });
@@ -65,11 +74,19 @@ router.post("/refresh", async (req: Request, res: Response): Promise<any> => {
     const { accessToken: newAccessToken, refreshToken: newToken } =
       await generateTokens({ id: userId, email, role, tokenId }, true);
 
+    // Update cookie dengan refresh token baru
+    res.cookie("refreshToken", newToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
     res.json({
       tokens: {
         type: "Bearer",
         accessToken: newAccessToken,
-        refreshToken: newToken,
+        // refreshToken tidak dikirim di body untuk keamanan
       },
     });
   } catch (error) {
@@ -79,7 +96,8 @@ router.post("/refresh", async (req: Request, res: Response): Promise<any> => {
 });
 
 router.post("/logout", async (req: Request, res: Response): Promise<any> => {
-  const { refreshToken } = req.body as { refreshToken: string };
+  // Baca refresh token dari HttpOnly Cookie
+  const refreshToken = req.cookies?.refreshToken;
 
   if (!refreshToken) {
     return res.status(400).json({ message: "Refresh token is required" });
@@ -94,6 +112,13 @@ router.post("/logout", async (req: Request, res: Response): Promise<any> => {
 
     await prisma.token.delete({
       where: { token: refreshToken },
+    });
+
+    // Clear cookie setelah logout
+    res.clearCookie("refreshToken", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
     });
 
     res.json({ message: "Logged out successfully" });

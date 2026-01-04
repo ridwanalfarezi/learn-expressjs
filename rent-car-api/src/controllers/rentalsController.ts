@@ -1,6 +1,7 @@
 import { PrismaClient, Rental } from "@prisma/client";
 import { Request, Response } from "express";
-import redisClient from "../config/redis";
+import { safeRedisDel, safeRedisGet, safeRedisSet } from "../config/redis";
+import { logSecurityEvent } from "../utils/logger";
 
 const prisma = new PrismaClient();
 class RentalsController {
@@ -18,7 +19,7 @@ class RentalsController {
     };
 
     const cacheKey = `rentals:${query}:${page}:${startedDate}:${endDate}`;
-    const cachedRents = await redisClient.get(cacheKey);
+    const cachedRents = await safeRedisGet(cacheKey);
 
     if (cachedRents) {
       return res.json({ data: JSON.parse(cachedRents) });
@@ -52,7 +53,7 @@ class RentalsController {
         });
       }
 
-      await redisClient.set(cacheKey, JSON.stringify(rents), {
+      await safeRedisSet(cacheKey, JSON.stringify(rents), {
         EX: 3600,
       });
 
@@ -66,11 +67,23 @@ class RentalsController {
   async show(req: Request, res: Response) {
     try {
       const { rentalId } = req.params;
+      const currentUser = req.user as { id: string; role: string };
       const cacheKey = `rental:${rentalId}`;
-      const cachedRent = await redisClient.get(cacheKey);
+      const cachedRent = await safeRedisGet(cacheKey);
 
       if (cachedRent) {
-        return res.json({ data: JSON.parse(cachedRent) });
+        const rent = JSON.parse(cachedRent);
+
+        // Validasi ownership (kecuali admin bisa lihat semua)
+        if (currentUser.role !== "admin" && currentUser.id !== rent.userId) {
+          return res
+            .status(403)
+            .json({
+              message: "Forbidden: You don't have access to this rental",
+            });
+        }
+
+        return res.json({ data: rent });
       }
 
       const rent = await prisma.rental.findUnique({
@@ -82,7 +95,19 @@ class RentalsController {
         return res.status(404).json({ message: "Rental not found" });
       }
 
-      await redisClient.set(cacheKey, JSON.stringify(rent), {
+      // Validasi ownership (kecuali admin bisa lihat semua)
+      if (currentUser.role !== "admin" && currentUser.id !== rent.userId) {
+        logSecurityEvent("UNAUTHORIZED_RENTAL_ACCESS", {
+          userId: currentUser.id,
+          targetRentalId: rentalId,
+          rentalOwnerId: rent.userId,
+        });
+        return res
+          .status(403)
+          .json({ message: "Forbidden: You don't have access to this rental" });
+      }
+
+      await safeRedisSet(cacheKey, JSON.stringify(rent), {
         EX: 3600,
       });
 
@@ -94,9 +119,9 @@ class RentalsController {
   }
 
   async store(req: Request, res: Response) {
-    let { carId, quantity, price, startDate, endDate } = req.body as Pick<
+    let { carId, quantity, startDate, endDate } = req.body as Pick<
       Rental,
-      "carId" | "quantity" | "price" | "startDate" | "endDate"
+      "carId" | "quantity" | "startDate" | "endDate"
     >;
 
     const currentUser = req.user as { id: string };
@@ -116,11 +141,10 @@ class RentalsController {
         .json({ message: "Not enough quantity of cars available" });
     }
 
-    price =
-      (Number(car.price) *
-        Number(quantity) *
-        (new Date(endDate).getTime() - new Date(startDate).getTime())) /
-      86400000;
+    // Calculate price server-side only
+    const days =
+      (new Date(endDate).getTime() - new Date(startDate).getTime()) / 86400000;
+    const price = Number(car.price) * Number(quantity) * days;
 
     const rental = await prisma.rental.create({
       data: {
@@ -138,7 +162,7 @@ class RentalsController {
       data: { quantity: car.quantity - quantity },
     });
 
-    await redisClient.del(`rentals:*`);
+    await safeRedisDel(`rentals:*`);
 
     res
       .status(201)
@@ -147,7 +171,7 @@ class RentalsController {
 
   async update(req: Request, res: Response) {
     const { rentalId } = req.params;
-    const currentUser = req.user as { id: string };
+    const currentUser = req.user as { id: string; role: string };
     const { startDate, endDate } = req.body as Pick<
       Rental,
       "startDate" | "endDate"
@@ -162,8 +186,16 @@ class RentalsController {
       return res.status(404).json({ message: "Rental not found" });
     }
 
-    if (currentUser.id !== rent.user.id) {
-      return res.status(403).json({ message: "Unauthorized" });
+    // Validasi ownership (kecuali admin)
+    if (currentUser.role !== "admin" && currentUser.id !== rent.user.id) {
+      logSecurityEvent("UNAUTHORIZED_RENTAL_UPDATE", {
+        userId: currentUser.id,
+        targetRentalId: rentalId,
+        rentalOwnerId: rent.user.id,
+      });
+      return res
+        .status(403)
+        .json({ message: "Forbidden: You don't have access to this rental" });
     }
 
     if (rent.status === "active") {
@@ -203,15 +235,15 @@ class RentalsController {
       },
     });
 
-    await redisClient.del(`rental:${rentalId}`);
-    await redisClient.del(`rentals:*`);
+    await safeRedisDel(`rental:${rentalId}`);
+    await safeRedisDel(`rentals:*`);
 
     res.json({ message: "Rental updated successfully", data: updatedRental });
   }
 
   async destroy(req: Request, res: Response) {
     const { rentalId } = req.params;
-    const currentUser = req.user as { id: string };
+    const currentUser = req.user as { id: string; role: string };
 
     const rent = await prisma.rental.findUnique({
       where: { id: rentalId },
@@ -222,8 +254,16 @@ class RentalsController {
       return res.status(404).json({ message: "Rental not found" });
     }
 
-    if (currentUser.id !== rent.user.id) {
-      return res.status(403).json({ message: "Unauthorized" });
+    // Validasi ownership (kecuali admin)
+    if (currentUser.role !== "admin" && currentUser.id !== rent.user.id) {
+      logSecurityEvent("UNAUTHORIZED_RENTAL_DELETE", {
+        userId: currentUser.id,
+        targetRentalId: rentalId,
+        rentalOwnerId: rent.user.id,
+      });
+      return res
+        .status(403)
+        .json({ message: "Forbidden: You don't have access to this rental" });
     }
 
     if (rent.status !== "pending") {
@@ -239,18 +279,31 @@ class RentalsController {
       data: { quantity: { increment: rent.quantity } },
     });
 
-    await redisClient.del(`rental:${rentalId}`);
-    await redisClient.del(`rentals:*`);
+    await safeRedisDel(`rental:${rentalId}`);
+    await safeRedisDel(`rentals:*`);
 
     res.json({ message: "Rental deleted successfully" });
   }
 
   async showByUser(req: Request, res: Response) {
     const { userId } = req.params;
-    const currentUser = req.user as { id: string };
+    const currentUser = req.user as { id: string; role: string };
+
+    // Validasi authorization SEBELUM query database
+    if (currentUser.role !== "admin" && currentUser.id !== userId) {
+      logSecurityEvent("UNAUTHORIZED_USER_RENTALS_ACCESS", {
+        userId: currentUser.id,
+        targetUserId: userId,
+      });
+      return res
+        .status(403)
+        .json({
+          message: "Forbidden: You don't have access to this user's rentals",
+        });
+    }
 
     const cacheKey = `rentals:user:${userId}`;
-    const cachedRents = await redisClient.get(cacheKey);
+    const cachedRents = await safeRedisGet(cacheKey);
 
     if (cachedRents) {
       return res.json({ data: JSON.parse(cachedRents) });
@@ -261,11 +314,7 @@ class RentalsController {
       include: { car: true, user: true },
     });
 
-    if (currentUser.id !== userId) {
-      return res.status(403).json({ message: "Unauthorized" });
-    }
-
-    await redisClient.set(cacheKey, JSON.stringify(rents), {
+    await safeRedisSet(cacheKey, JSON.stringify(rents), {
       EX: 3600,
     });
 
