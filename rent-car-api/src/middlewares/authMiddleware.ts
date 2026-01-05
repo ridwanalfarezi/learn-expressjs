@@ -1,9 +1,7 @@
-import { PrismaClient } from "@prisma/client";
 import { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { ACCESS_TOKEN_SECRET } from "../env";
-
-const prisma = new PrismaClient();
+import prisma from "../utils/prismaClient";
 export const verifyUser = async (
   req: Request,
   res: Response,

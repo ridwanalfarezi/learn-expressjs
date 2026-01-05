@@ -19,4 +19,7 @@ const validateSchema =
 export const validateUser = validateSchema(userSchema);
 export const validateCar = validateSchema(carSchema);
 export const validateRentalStore = validateSchema(rentalSchema);
-export const validateRentalUpdate = validateSchema(rentalSchema.fork(['carId', 'quantity', 'price'], (schema) => schema.forbidden()));
+// For updates, prevent changing carId and quantity; price is not part of rentalSchema
+export const validateRentalUpdate = validateSchema(
+  rentalSchema.fork(["carId", "quantity"], (schema) => schema.forbidden())
+);

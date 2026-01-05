@@ -1,7 +1,6 @@
-import { PrismaClient } from "@prisma/client";
 import cron from "node-cron";
 
-const prisma = new PrismaClient();
+import prisma from "./prismaClient";
 
 // Schedule a task to run every hour
 cron.schedule("0 * * * *", async () => {

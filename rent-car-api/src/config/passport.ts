@@ -1,4 +1,4 @@
-import { PrismaClient, User } from "@prisma/client";
+import { User } from "@prisma/client";
 import passport from "passport";
 import {
   Strategy as GoogleStrategy,
@@ -6,8 +6,7 @@ import {
 } from "passport-google-oauth20";
 import { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET } from "../env";
 import generateTokens from "../utils/generateTokens";
-
-const prisma = new PrismaClient();
+import prisma from "../utils/prismaClient";
 
 export function initializePassport(passport: passport.PassportStatic) {
   passport.use(

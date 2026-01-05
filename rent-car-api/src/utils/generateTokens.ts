@@ -1,4 +1,3 @@
-import { PrismaClient } from "@prisma/client";
 import jwt from "jsonwebtoken";
 import {
   ACCESS_TOKEN_EXPIRES_IN,
@@ -7,8 +6,7 @@ import {
   REFRESH_TOKEN_SECRET,
 } from "../env";
 import ErrorHandler from "./ErrorHandler";
-
-const prisma = new PrismaClient();
+import prisma from "./prismaClient";
 
 async function generateTokens(
   user: { id: string; email: string; role: string; tokenId?: string },

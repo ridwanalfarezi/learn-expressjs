@@ -6,9 +6,11 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
+    "typeRoots": ["./node_modules/@types", "./src/types"],
+    "types": ["node", "pg"],
     "outDir": "./dist",
     "rootDir": "./src"
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "src/**/*.d.ts"],
   "exclude": ["node_modules", "dist"]
 }

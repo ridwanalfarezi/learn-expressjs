@@ -22,6 +22,7 @@ if (missingVars.length > 0) {
 // Export dengan validation
 const PORT = parseInt(process.env.PORT || "3000", 10);
 const SERVER_URL = process.env.SERVER_URL || `http://localhost:${PORT}`;
+const DATABASE_URL = process.env.DATABASE_URL!;
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID!;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!;
@@ -36,6 +37,7 @@ const REDIS_URL = process.env.REDIS_URL;
 export {
   ACCESS_TOKEN_EXPIRES_IN,
   ACCESS_TOKEN_SECRET,
+  DATABASE_URL,
   GOOGLE_CLIENT_ID,
   GOOGLE_CLIENT_SECRET,
   PORT,

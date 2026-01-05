@@ -1,7 +1,6 @@
-import { PrismaClient, Token } from "@prisma/client";
+import { Token } from "@prisma/client";
 import { DatabaseError, NotFoundError } from "../utils/errors";
-
-const prisma = new PrismaClient();
+import prisma from "../utils/prismaClient";
 
 export interface CreateTokenInput {
   userId: string;

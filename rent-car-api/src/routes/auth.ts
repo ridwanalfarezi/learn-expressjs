@@ -1,12 +1,12 @@
-import { PrismaClient, User } from "@prisma/client";
+import { User } from "@prisma/client";
 import dotenv from "dotenv";
 import { Request, Response, Router } from "express";
 import passport from "passport";
 import generateTokens from "../utils/generateTokens";
+import prisma from "../utils/prismaClient";
 import verifyRefreshToken from "../utils/verifyRefreshToken";
 
 const router = Router();
-const prisma = new PrismaClient();
 dotenv.config();
 
 router.get(

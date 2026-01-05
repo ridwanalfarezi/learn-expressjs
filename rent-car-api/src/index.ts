@@ -5,7 +5,9 @@ import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import passport from "passport";
 import path from "path";
+import swaggerUi from "swagger-ui-express";
 import { initializePassport } from "./config/passport";
+import swaggerSpec from "./config/swagger";
 import { PORT, SERVER_URL } from "./env";
 import carsRouter from "./routes/admin/cars";
 import usersRouter from "./routes/admin/users";
@@ -25,7 +27,7 @@ app.use(
         defaultSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", "data:", "https:"],
-        scriptSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
       },
     },
     hsts: {
@@ -98,12 +100,18 @@ app.use("/rentals", apiLimiter, rentalsRouter);
 app.use("/admin/users", apiLimiter, usersRouter);
 app.use("/admin/cars", apiLimiter, carsRouter);
 
-app.get("/", (req: Request, res: Response) => {
-  res.json({ message: "Welcome to Car Rental API, API Docs: /docs" });
+// API documentation
+app.use(
+  "/docs",
+  swaggerUi.serve,
+  swaggerUi.setup(swaggerSpec, { explorer: true })
+);
+app.get("/docs.json", (_req: Request, res: Response) => {
+  res.json(swaggerSpec);
 });
 
-app.get("/docs", (req: Request, res: Response) => {
-  res.redirect("https://documenter.getpostman.com/view/27798268/2sAYX5Khec");
+app.get("/", (req: Request, res: Response) => {
+  res.json({ message: "Welcome to Car Rental API, API Docs: /docs" });
 });
 
 app.all("*", (req: Request, res: Response, next: NextFunction) => {

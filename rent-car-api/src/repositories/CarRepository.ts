@@ -1,7 +1,6 @@
-import { Car, PrismaClient } from "@prisma/client";
+import { Car } from "@prisma/client";
 import { DatabaseError, NotFoundError } from "../utils/errors";
-
-const prisma = new PrismaClient();
+import prisma from "../utils/prismaClient";
 
 export interface CreateCarInput {
   name: string;

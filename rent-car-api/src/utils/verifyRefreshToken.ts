@@ -1,8 +1,6 @@
-import { PrismaClient } from "@prisma/client";
 import jwt from "jsonwebtoken";
 import { REFRESH_TOKEN_SECRET } from "../env";
-
-const prisma = new PrismaClient();
+import prisma from "./prismaClient";
 
 const verifyRefreshToken = async (
   token: string

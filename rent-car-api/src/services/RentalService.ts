@@ -246,6 +246,15 @@ export class RentalService {
       currentUserRole
     );
 
+    const originalStartDate = new Date(rental.startDate);
+    const originalEndDate = new Date(rental.endDate);
+    if (
+      isNaN(originalStartDate.getTime()) ||
+      isNaN(originalEndDate.getTime())
+    ) {
+      throw new BusinessLogicError("Rental dates are invalid");
+    }
+
     // Check if rental can be updated
     if (rental.status === "active") {
       throw new BusinessLogicError("Cannot update an active rental");
@@ -257,13 +266,16 @@ export class RentalService {
 
     // Validate new dates if provided
     if (startDate || endDate) {
-      const newStartDate = startDate ? new Date(startDate) : rental.startDate;
-      const newEndDate = endDate ? new Date(endDate) : rental.endDate;
+      const newStartDate = startDate ? new Date(startDate) : originalStartDate;
+      const newEndDate = endDate ? new Date(endDate) : originalEndDate;
 
-      this.validateRentalDates(newStartDate, newEndDate, rental.startDate);
+      this.validateRentalDates(newStartDate, newEndDate, originalStartDate);
 
       // Validate that duration hasn't changed
-      const originalDays = this.calculateDays(rental.startDate, rental.endDate);
+      const originalDays = this.calculateDays(
+        originalStartDate,
+        originalEndDate
+      );
       const newDays = this.calculateDays(newStartDate, newEndDate);
 
       if (originalDays !== newDays) {
